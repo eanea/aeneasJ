@@ -3,13 +3,17 @@ package com.wavesplatform.wavesj;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import static com.wavesplatform.wavesj.Hash.secureHash;
+import static com.wavesplatform.wavesj.Hash.*;
 
 public class PublicKeyAccount implements Account {
 
     private final byte chainId;
     private final byte[] publicKey;
     private final String address;
+    private static final byte ADDRESS_VERSION = 1;
+    private static final int CHECKSUM_LENGTH = 4;
+    private static final int HASH_LENGTH = 32;
+    private static final int AddressLength = 1 + 1/*2 for random UTF symbol in chainId*/ + HASH_LENGTH + CHECKSUM_LENGTH;
 
     public PublicKeyAccount(byte[] publicKey, byte chainId) {
         this.chainId = chainId;
@@ -34,12 +38,37 @@ public class PublicKeyAccount implements Account {
     }
 
     private static byte[] address(byte[] publicKey, byte chainId) {
-        ByteBuffer buf = ByteBuffer.allocate(26);
-        byte[] hash = secureHash(publicKey, 0, publicKey.length);
-        buf.put((byte) 1).put((byte) chainId).put(hash, 0, 20);
-        byte[] checksum = secureHash(buf.array(), 0, 22);
-        buf.put(checksum, 0, 4);
-        return buf.array();
+        byte[] bytes;
+        if (chainId == Byte.MIN_VALUE) {
+            ByteBuffer bytesWithVersion = ByteBuffer
+                    .allocate(1 + publicKey.length)
+                    .put(ADDRESS_VERSION)
+                    .put(publicKey);
+
+            byte[] checkSum = calcCheckSum(bytesWithVersion.array());
+
+            bytes = ByteBuffer.allocate(bytesWithVersion.array().length + checkSum.length).put(bytesWithVersion.array()).put(checkSum).array();
+        } else {
+            byte[] withoutChecksum = ByteBuffer
+                    .allocate(1 + 1 + HASH_LENGTH)
+                    .put(ADDRESS_VERSION)
+                    .put(chainId)
+                    .put(secureHash(publicKey, 0, publicKey.length), 0, HASH_LENGTH)
+                    .array();
+
+            bytes = ByteBuffer
+                    .allocate(AddressLength)
+                    .put(withoutChecksum)
+                    .put(calcCheckSum(withoutChecksum), 0, CHECKSUM_LENGTH)
+                    .array();
+        }
+
+       return bytes;
+    }
+
+    private static byte[] calcCheckSum(byte[] bytes) {
+        byte[] checkSum = hash(bytes, 0, bytes.length, BLAKE2B256);
+        return Arrays.copyOf(checkSum, CHECKSUM_LENGTH);
     }
 
     @Override

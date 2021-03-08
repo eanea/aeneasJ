@@ -1,10 +1,13 @@
 package com.wavesplatform.wavesj;
 
 import org.whispersystems.curve25519.Curve25519;
-import org.whispersystems.curve25519.java.curve_sigs;
+import org.whispersystems.curve25519.OpportunisticCurve25519Provider;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
@@ -13,6 +16,16 @@ import static com.wavesplatform.wavesj.Hash.*;
 public class PrivateKeyAccount extends PublicKeyAccount {
 
     private static final Curve25519 cipher = Curve25519.getInstance(Curve25519.BEST);
+    private static OpportunisticCurve25519Provider provider;
+    static {
+        Constructor<OpportunisticCurve25519Provider> constructor = (Constructor<OpportunisticCurve25519Provider>) OpportunisticCurve25519Provider.class.getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        try {
+            provider = constructor.newInstance();
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+    }
 
     private static final String[] SEED_WORDS = {
             "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse", "access",
@@ -267,22 +280,15 @@ public class PrivateKeyAccount extends PublicKeyAccount {
         // account seed from seed & nonce
         ByteBuffer buf = ByteBuffer.allocate(seed.getBytes().length + 4);
         buf.putInt(nonce).put(seed.getBytes());
+
         byte[] accountSeed = secureHash(buf.array(), 0, buf.array().length);
+        byte[] accountSeedSHA = hash(accountSeed, 0, accountSeed.length, SHA256);
 
-        // private key from account seed & chainId
-        byte[] hashedSeed = hash(accountSeed, 0, accountSeed.length, SHA256);
-        byte[] privateKey = Arrays.copyOf(hashedSeed, 32);
-        privateKey[0] &= 248;
-        privateKey[31] &= 127;
-        privateKey[31] |= 64;
-
-        return privateKey;
+        return provider.generatePrivateKey(accountSeedSHA);
     }
 
     private static byte[] publicKey(byte[] privateKey) {
-        byte[] publicKey = new byte[32];
-        curve_sigs.curve25519_keygen(publicKey, privateKey);
-        return publicKey;
+        return provider.generatePublicKey(privateKey);
     }
 
     @Override
