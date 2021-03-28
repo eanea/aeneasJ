@@ -11,6 +11,7 @@ public class ByteUtils {
     public static final int KBYTE = 1024;
     public static final byte OPTIONAL_EXIST = 1;
     public static final byte OPTIONAL_EMPTY = 0;
+    public static final String prefix = "Æx";
 
     public final static Charset UTF8 = Charset.forName("UTF-8");
 
@@ -85,6 +86,9 @@ public class ByteUtils {
             // assume an alias
             buffer.put((byte) 0x02).put(chainId).putShort((short) recipient.length()).put(recipient.getBytes(UTF8));
             return String.format("alias:%c:%s", chainId, recipient);
+        } else if (recipient.startsWith(prefix)) {
+            buffer.put(Base58.decode(recipient.substring(2)));
+            return recipient;
         } else {
             buffer.put(Base58.decode(recipient));
             return recipient;
